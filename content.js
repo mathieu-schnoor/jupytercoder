@@ -1,3 +1,7 @@
+let currentSuggestion = null;
+let currentCell = null;
+let suggestionBox;
+
 async function getOpenAIKey() {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type: "getApiKey" }, (response) => {
@@ -39,7 +43,9 @@ ${code}
 Please provide the missing code to complete the task. (do not include code that is already present in the prompt)
 `;
 
-  return await sendToOpenAI(prompt);
+  // return await sendToOpenAI(prompt);
+  return `\`\`\`d():
+  print("Hello world");\`\`\``;
 }
 
 // Check if the current page is a Jupyter Notebook
@@ -70,7 +76,7 @@ if (document.querySelector('body.notebook_app')) {
             const codeBlockRegex = /```([\s\S]*?)```/g;
             const match = codeBlockRegex.exec(suggestion);
             const extractedCode = match && match[1] ? match[1].trim() : '';
-            insertSuggestion(activeCell, extractedCode);
+            showSuggestion(activeCell, extractedCode);
           } else {
             console.log('No suggestion received from the API.');
           }
@@ -78,6 +84,13 @@ if (document.querySelector('body.notebook_app')) {
           console.error('Error:', error);
         });
       }
+    }
+    else if (event.code === 'Enter' && !!currentSuggestion && !!currentCell) {
+      insertSuggestion(currentCell, currentSuggestion);
+      hideSuggestion();
+      return false;
+    } else if (!event.ctrlKey && !!suggestionBox) {
+      hideSuggestion();
     }
   });
 
@@ -93,10 +106,38 @@ if (document.querySelector('body.notebook_app')) {
   }
 }
 
+function showSuggestion(cell, suggestion) {
+  const cursor = cell.querySelector('.CodeMirror-cursor');
+  const cursorPos = cursor.getBoundingClientRect();
+  suggestionBox = document.createElement('div');
+  suggestionBox.setAttribute('style', `
+    position:absolute;
+    background: transparent;
+    color: grey;
+    white-space: nowrap;
+    font-family: monospace;
+    font-size: 14px;
+    margin-top: -1px;
+    left: ${cursorPos.x}px;
+    top: ${cursorPos.y}px;
+  `);
+  suggestionBox.innerText = suggestion;
+  document.body.appendChild(suggestionBox);
+  document.querySelector('#notebook').focus();
+  currentCell = cell;
+  currentSuggestion = suggestion;
+}
+
+function hideSuggestion() {
+  document.body.removeChild(suggestionBox);
+  suggestionBox = null;
+  currentCell = null;
+  currentSuggestion = null;
+}
+
 function insertSuggestion(cell, suggestion) {
   // Get the textarea inside the div
   const textarea = cell.querySelector('textarea');
-
   if (textarea) {
     // Get the current cursor position
     const cursorPosition = textarea.selectionStart;
